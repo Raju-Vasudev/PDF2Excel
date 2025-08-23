@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple PDF Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF.js Test</h1>
+        <p>This page tests if PDF.js is working correctly with the local worker.</p>
+        
+        <div id="status" class="status info">Ready to test...</div>
+        
+        <div>
+            <button id="testBtn">Test PDF.js Setup</button>
+            <button id="uploadBtn">Upload PDF Test</button>
+        </div>
+        
+        <div id="results" style="margin-top: 20px;"></div>
+    </div>
+
+    <!-- PDF.js library -->
+    <script src="https://unpkg.com/pdfjs-dist@5.4.54/build/pdf.min.js"></script>
+    
+    <script>
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        
+        const status = document.getElementById('status');
+        const testBtn = document.getElementById('testBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const results = document.getElementById('results');
+        
+        function updateStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Test PDF.js setup
+        testBtn.addEventListener('click', async () => {
+            updateStatus('Testing PDF.js setup...', 'info');
+            
+            try {
+                // Test if PDF.js is loaded
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('PDF.js library not loaded');
+                }
+                
+                updateStatus(`PDF.js version: ${pdfjsLib.version}`, 'success');
+                results.innerHTML = `
+                    <h3>PDF.js Setup Test Results:</h3>
+                    <ul>
+                        <li>✅ PDF.js library loaded</li>
+                        <li>✅ Version: ${pdfjsLib.version}</li>
+                        <li>✅ Worker source: ${pdfjsLib.GlobalWorkerOptions.workerSrc}</li>
+                    </ul>
+                `;
+                
+            } catch (error) {
+                updateStatus(`Test failed: ${error.message}`, 'error');
+                results.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        });
+        
+        // Test PDF upload
+        uploadBtn.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                updateStatus('Processing PDF...', 'info');
+                
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                    const pdf = await loadingTask.promise;
+                    
+                    updateStatus(`PDF loaded successfully! Pages: ${pdf.numPages}`, 'success');
+                    results.innerHTML = `
+                        <h3>PDF Processing Test Results:</h3>
+                        <ul>
+                            <li>✅ PDF file loaded</li>
+                            <li>✅ Pages: ${pdf.numPages}</li>
+                            <li>✅ File size: ${(file.size / 1024).toFixed(2)} KB</li>
+                        </ul>
+                    `;
+                    
+                } catch (error) {
+                    updateStatus(`PDF processing failed: ${error.message}`, 'error');
+                    results.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                }
+            };
+            input.click();
+        });
+    </script>
+</body>
+</html>

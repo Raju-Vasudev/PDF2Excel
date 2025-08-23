@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { useState, useCallback } from 'react';
+import { Toaster, toast } from 'react-hot-toast';
 import Header from './components/Header';
 import FileUpload from './components/FileUpload';
 import ProcessingStatus from './components/ProcessingStatus';
 import DataPreview from './components/DataPreview';
 import ExportOptions from './components/ExportOptions';
 import SettingsPanel from './components/SettingsPanel';
+import { usePdfProcessor } from './hooks/usePdfProcessor';
+import { useExcelGenerator } from './hooks/useExcelGenerator';
+import DebugPanel from './components/DebugPanel';
 
 function App() {
   const [currentFile, setCurrentFile] = useState(null);
-  const [processingStatus, setProcessingStatus] = useState('idle');
-  const [processingProgress, setProcessingProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [extractedData, setExtractedData] = useState([]);
+  const [processedTables, setProcessedTables] = useState([]);
   const [settings, setSettings] = useState({
     detectionSensitivity: 'medium',
     minTableSize: 3,
@@ -23,112 +23,104 @@ function App() {
     textEncoding: 'utf-8'
   });
 
+  // Custom hooks for PDF processing and Excel generation
+  const {
+    processingStatus,
+    progress,
+    currentStep,
+    totalSteps,
+    error,
+    metadata,
+    extractedData,
+    analysis,
+    processPDF,
+    reset: resetProcessing,
+    retry
+  } = usePdfProcessor(settings);
+
+  const {
+    exportStatus,
+    exportProgress,
+    exportError,
+    exportedFile,
+    exportToExcel,
+    downloadFile,
+    resetExport,
+    getExportStatusMessage
+  } = useExcelGenerator();
+
   const handleFileSelect = async (file) => {
     setCurrentFile(file);
-    setProcessingStatus('processing');
-    setProcessingProgress(0);
-    setCurrentStep(1);
-    setExtractedData([]);
-
-    // Simulate processing for now (we'll implement actual PDF processing in Phase 2)
+    
     try {
-      // Simulate loading PDF
-      await simulateProgress(20, 1000);
-      setCurrentStep(2);
+      // Process the PDF using our custom hook
+      const tables = await processPDF(file);
+      setProcessedTables(tables);
       
-      // Simulate text extraction
-      await simulateProgress(40, 1500);
-      setCurrentStep(3);
-      
-      // Simulate table detection
-      await simulateProgress(60, 2000);
-      setCurrentStep(4);
-      
-      // Simulate data parsing
-      await simulateProgress(80, 1500);
-      setCurrentStep(5);
-      
-      // Simulate completion
-      await simulateProgress(100, 500);
-      
-      // Generate sample data for preview
-      const sampleData = generateSampleData();
-      setExtractedData(sampleData);
-      setProcessingStatus('completed');
+      toast.success('PDF processed successfully!');
     } catch (error) {
-      setProcessingStatus('error');
-      console.error('Processing error:', error);
+      console.error('File processing error:', error);
+      toast.error(error.message || 'Failed to process PDF');
     }
   };
 
-  const simulateProgress = (targetProgress, duration) => {
-    return new Promise((resolve) => {
-      const startProgress = processingProgress;
-      const startTime = Date.now();
-      
-      const updateProgress = () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(
-          startProgress + (elapsed / duration) * (targetProgress - startProgress),
-          targetProgress
-        );
-        
-        setProcessingProgress(progress);
-        
-        if (progress < targetProgress) {
-          requestAnimationFrame(updateProgress);
-        } else {
-          resolve();
-        }
-      };
-      
-      updateProgress();
-    });
-  };
+  const handleDataEdit = useCallback((newData) => {
+    // Update the processed tables with edited data
+    if (processedTables.length > 0) {
+      const updatedTables = processedTables.map(table => ({
+        ...table,
+        rows: newData
+      }));
+      setProcessedTables(updatedTables);
+    }
+  }, [processedTables]);
 
-  const generateSampleData = () => {
-    // Generate sample table data for demonstration
-    const headers = ['Name', 'Age', 'Department', 'Salary', 'Start Date'];
-    const sampleRows = [
-      ['John Doe', '32', 'Engineering', '$75,000', '2020-01-15'],
-      ['Jane Smith', '28', 'Marketing', '$65,000', '2019-03-20'],
-      ['Mike Johnson', '35', 'Sales', '$80,000', '2018-07-10'],
-      ['Sarah Wilson', '29', 'HR', '$60,000', '2021-02-28'],
-      ['David Brown', '31', 'Engineering', '$78,000', '2020-11-05'],
-      ['Lisa Davis', '27', 'Marketing', '$62,000', '2021-06-15'],
-      ['Tom Miller', '33', 'Sales', '$85,000', '2019-09-12'],
-      ['Emily Taylor', '26', 'HR', '$58,000', '2022-01-08'],
-      ['Chris Anderson', '30', 'Engineering', '$76,000', '2020-08-22'],
-      ['Amanda White', '34', 'Marketing', '$68,000', '2019-12-03']
-    ];
+  const handleExport = useCallback(async (exportOptions) => {
+    if (processedTables.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
 
-    return sampleRows.map(row => {
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = row[index];
+    try {
+      const fileName = currentFile ? currentFile.name.replace('.pdf', '') : 'extracted_data';
+      const result = await exportToExcel(processedTables, {
+        ...exportOptions,
+        fileName
       });
-      return obj;
-    });
-  };
+      
+      toast.success(`Exported as ${exportOptions.format.toUpperCase()}`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export file');
+    }
+  }, [processedTables, currentFile, exportToExcel]);
 
-  const handleDataEdit = (newData) => {
-    setExtractedData(newData);
-  };
+  const handleDownload = useCallback(() => {
+    if (exportedFile) {
+      downloadFile(exportedFile);
+    } else if (processedTables.length > 0) {
+      // Auto-export and download
+      const fileName = currentFile ? currentFile.name.replace('.pdf', '') : 'extracted_data';
+      exportToExcel(processedTables, { fileName }).then(() => {
+        toast.success('File downloaded successfully');
+      }).catch(error => {
+        toast.error('Failed to download file');
+      });
+    }
+  }, [exportedFile, processedTables, currentFile, downloadFile, exportToExcel]);
 
-  const handleExport = (exportOptions) => {
-    // We'll implement actual export functionality in Phase 3
-    console.log('Export options:', exportOptions);
-    console.log('Data to export:', extractedData);
-    
-    // For now, just show a success message
-    alert(`Exporting data as ${exportOptions.format.toUpperCase()}...`);
-  };
+  const handleRetry = useCallback(() => {
+    if (currentFile) {
+      retry(currentFile);
+    }
+  }, [currentFile, retry]);
 
-  const handleDownload = () => {
-    // We'll implement actual download functionality in Phase 3
-    console.log('Downloading Excel file...');
-    alert('Download functionality will be implemented in Phase 3');
-  };
+  const handleReset = useCallback(() => {
+    setCurrentFile(null);
+    setProcessedTables([]);
+    resetProcessing();
+    resetExport();
+  }, [resetProcessing, resetExport]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,10 +156,37 @@ function App() {
             {processingStatus !== 'idle' && (
               <ProcessingStatus
                 status={processingStatus}
-                progress={processingProgress}
+                progress={progress}
                 currentStep={currentStep}
-                totalSteps={5}
+                totalSteps={totalSteps}
               />
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <div className="card">
+                <div className="bg-error-50 border border-error-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-error-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-error-800">Processing Error</h3>
+                      <p className="text-sm text-error-700 mt-1">{error}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      onClick={handleRetry}
+                      className="btn-error text-sm"
+                    >
+                      Retry Processing
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Data Preview */}
@@ -178,6 +197,16 @@ function App() {
                 onEdit={handleDataEdit}
               />
             )}
+
+            {/* Debug Panel */}
+            <DebugPanel
+              currentFile={currentFile}
+              processingStatus={processingStatus}
+              error={error}
+              metadata={metadata}
+              extractedData={extractedData}
+              analysis={analysis}
+            />
           </div>
 
           {/* Sidebar */}
@@ -186,7 +215,7 @@ function App() {
             {extractedData.length > 0 && (
               <ExportOptions
                 onExport={handleExport}
-                isProcessing={processingStatus === 'processing'}
+                isProcessing={processingStatus === 'processing' || exportStatus === 'exporting'}
               />
             )}
 
@@ -195,6 +224,18 @@ function App() {
               settings={settings}
               onSettingsChange={setSettings}
             />
+
+            {/* Reset Button */}
+            {(currentFile || extractedData.length > 0) && (
+              <div className="card">
+                <button
+                  onClick={handleReset}
+                  className="w-full btn-secondary"
+                >
+                  Reset All
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PDF Debug Test</h1>
+        <p>This page helps debug PDF processing issues. Upload your PDF file to see detailed information.</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>Drag and drop your PDF file here or click to browse</p>
+            <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+        </div>
+        
+        <div id="results" class="results" style="display: none;"></div>
+        
+        <div id="controls" style="margin-top: 20px;">
+            <button id="testBtn" disabled>Test PDF Processing</button>
+            <button id="clearBtn">Clear Results</button>
+        </div>
+    </div>
+
+    <!-- PDF.js library -->
+    <script src="https://unpkg.com/pdfjs-dist@5.4.54/build/pdf.min.js"></script>
+    
+    <script>
+        // Set up PDF.js worker - use local worker file
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        
+        let selectedFile = null;
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const results = document.getElementById('results');
+        const testBtn = document.getElementById('testBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        
+        // File upload handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+        
+        function handleFileSelect(file) {
+            if (file.type !== 'application/pdf') {
+                showError('Please select a PDF file.');
+                return;
+            }
+            
+            selectedFile = file;
+            testBtn.disabled = false;
+            showSuccess(`File selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+        }
+        
+        // Test PDF processing
+        testBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            
+            testBtn.disabled = true;
+            results.style.display = 'block';
+            results.textContent = 'Testing PDF processing...\n\n';
+            
+            try {
+                await testPDFProcessing(selectedFile);
+            } catch (error) {
+                showError(`Test failed: ${error.message}`);
+            } finally {
+                testBtn.disabled = false;
+            }
+        });
+        
+        // Clear results
+        clearBtn.addEventListener('click', () => {
+            results.style.display = 'none';
+            results.textContent = '';
+            selectedFile = null;
+            testBtn.disabled = true;
+        });
+        
+        async function testPDFProcessing(file) {
+            const log = (message) => {
+                results.textContent += message + '\n';
+                results.scrollTop = results.scrollHeight;
+            };
+            
+            log('🔍 Starting PDF Processing Test...');
+            log(`📁 File: ${file.name}`);
+            log(`📊 Size: ${(file.size / 1024).toFixed(2)} KB`);
+            log(`📄 Type: ${file.type}`);
+            log('');
+            
+            // Step 1: Check file validity
+            log('1️⃣ Checking file validity...');
+            if (file.type !== 'application/pdf') {
+                throw new Error('File is not a PDF');
+            }
+            log('✅ File type is valid');
+            log('');
+            
+            // Step 2: Convert to ArrayBuffer
+            log('2️⃣ Converting file to ArrayBuffer...');
+            const arrayBuffer = await file.arrayBuffer();
+            log(`✅ ArrayBuffer created, size: ${arrayBuffer.byteLength} bytes`);
+            log('');
+            
+            // Step 3: Load PDF document
+            log('3️⃣ Loading PDF document...');
+            log(`📚 PDF.js version: ${pdfjsLib.version}`);
+            log(`🔧 Worker source: ${pdfjsLib.GlobalWorkerOptions.workerSrc}`);
+            
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
+            log(`✅ PDF loaded successfully`);
+            log(`📄 Number of pages: ${pdf.numPages}`);
+            log('');
+            
+            // Step 4: Extract text from each page
+            log('4️⃣ Extracting text content...');
+            let totalTextItems = 0;
+            let totalTextLength = 0;
+            
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                log(`📖 Processing page ${pageNum}...`);
+                
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                const pageTextItems = textContent.items.length;
+                const pageTextLength = textContent.items.reduce((sum, item) => sum + item.str.length, 0);
+                
+                totalTextItems += pageTextItems;
+                totalTextLength += pageTextLength;
+                
+                log(`   📝 Text items: ${pageTextItems}`);
+                log(`   📏 Text length: ${pageTextLength} characters`);
+                
+                // Show sample text items
+                if (pageTextItems > 0) {
+                    log(`   📄 Sample text items:`);
+                    textContent.items.slice(0, 3).forEach((item, index) => {
+                        log(`      ${index + 1}. "${item.str}" (x: ${item.transform[4].toFixed(2)}, y: ${item.transform[5].toFixed(2)})`);
+                    });
+                } else {
+                    log(`   ⚠️  No text items found on this page`);
+                }
+                log('');
+            }
+            
+            // Step 5: Summary
+            log('5️⃣ Processing Summary:');
+            log(`📊 Total pages: ${pdf.numPages}`);
+            log(`📝 Total text items: ${totalTextItems}`);
+            log(`📏 Total text length: ${totalTextLength} characters`);
+            log(`📈 Average items per page: ${(totalTextItems / pdf.numPages).toFixed(1)}`);
+            log(`📈 Average text per page: ${(totalTextLength / pdf.numPages).toFixed(0)} characters`);
+            log('');
+            
+            if (totalTextItems === 0) {
+                log('❌ No text content found in the PDF!');
+                log('💡 This could mean:');
+                log('   - The PDF contains only images');
+                log('   - The PDF is corrupted');
+                log('   - The PDF is password protected');
+                log('   - The PDF uses non-standard text encoding');
+            } else {
+                log('✅ PDF processing test completed successfully!');
+                log('💡 The PDF contains extractable text content.');
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.container').insertBefore(errorDiv, results);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+        
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = message;
+            document.querySelector('.container').insertBefore(successDiv, results);
+            setTimeout(() => successDiv.remove(), 5000);
+        }
+    </script>
+</body>
+</html>
