@@ -13,7 +13,7 @@
     "file-saver": "^2.0.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.541.0",
-    "pdfjs-dist": "^4.2.67",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-dropzone": "^14.3.8",
