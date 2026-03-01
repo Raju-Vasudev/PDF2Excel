@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "file-saver": "^2.0.5",
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.23",
     "lucide-react": "^0.541.0",
     "pdfjs-dist": "^4.2.67",
     "react": "^19.1.1",
